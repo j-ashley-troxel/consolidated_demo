@@ -1,0 +1,276 @@
+
+
+[core]
+inside 150.2.0.0/16
+
+[gehc_net_trnsl8]
+
+[vpn6]
+
+[isp]
+
+[c_index_1]
+
+[c_index_2]
+
+[c_index_3]
+
+
+-----------------	
+
+[ASA]
+enable
+cisco135
+
+hostname C-INDEX-3
+
+int g0/0
+security-level 0
+nameif outside
+ip address 50.60.70.1 255.255.255.252
+no shut
+
+int g0/1
+security-level 100
+nameif inside
+ip address 10.254.254.1 255.255.255.248
+no shut
+
+crypto ipsec ikev2 ipsec-proposal gcm256
+protocol esp encryption aes-gcm-256
+protocol esp integrity null
+
+crypto ikev2 policy 1
+encryption aes-gcm-256
+integrity null
+prf sha512
+group 21
+
+crypto ipsec profile HQ_gcm256
+set ikev2 ipsec-proposal gcm256
+
+crypto ikev2 enable outside
+
+interface tunnel 30
+ip address 192.168.0.10 255.255.255.252
+tunnel destination 20.30.40.1
+tunnel mode ipsec ipv4 
+tunnel source interface outside
+nameif HQ_tunnel_30
+tunnel protection ipsec profile HQ_gcm256
+
+tunnel-group 20.30.40.1 type ipsec-l2l
+tunnel-group 20.30.40.1 ipsec-attributes
+ikev2 local-authentication pre-shared-key test123
+ikev2 remote-authentication pre-shared-key test123
+
+route hq_tunnel_30 150.2.0.0 255.255.0.0 50.60.70.2
+route outside 0.0.0.0 0.0.0.0 50.60.70.2
+
+router ospf 1
+network 50.60.70.0 255.255.255.252 area 0
+
+object network hq_remote
+subnet 150.2.0.0 255.255.0.0
+
+object network cust_30_linux
+host 10.254.254.2
+
+#see if this can be removed
+nat source static cust_30_linux cust_30_linux destination static hq_remote hq_remote
+
+
+----------------------------
+
+[ISP]
+
+hostname ISP
+
+int g0/0
+ip address 20.30.40.2 255.255.255.252
+no shut
+
+int g0/1
+ip address 30.40.50.2 255.255.255.252
+no shut
+
+int g0/2
+ip address 40.50.60.2 255.255.255.252
+no shut
+
+int g0/3
+ip address 50.60.70.2 255.255.255.252
+no shut
+
+int loopback 1
+ip address 1.1.1.2 255.255.255.255
+
+router ospf 1
+router-id 1.1.1.2
+network 1.1.1.2 0.0.0.0 area 0
+network 20.30.40.0 0.0.0.3 area 0
+network 30.40.50.0 0.0.0.3 area 0
+network 40.50.60.0 0.0.0.3 area 0
+network 50.60.70.0 0.0.0.3 area 0
+
+
+-----------------------
+
+[Core]
+
+hostname Core
+
+int g0/0
+ip address 150.2.0.1 255.255.0.0
+no shut
+
+int g0/1
+ip address 172.16.0.1 255.255.255.248
+no shut
+
+int g0/2
+ip address 172.16.1.1 255.255.255.248
+no shut
+
+
+#route to VPN6
+ip route 100.71.0.0 255.255.128.0 gi0/0 172.16.0.2
+
+#route to GEHC_NET_TRNSL8
+ip route 100.71.3.0 255.255.255.0 gi0/2 172.16.1.2
+
+---------------------
+
+[VPN6]
+
+hostname VPN6
+
+int g1
+ip address 172.16.0.2 255.255.255.248
+no shut
+
+int g2
+ip address 20.30.40.1 255.255.255.252
+no shut
+
+vrf definition VRF_3_LEFT
+address-family ipv4
+exit-address-family
+
+vrf definition VRF_3_RIGHT
+address-family ipv4
+exit-address-family
+
+int loopback 1
+ip address 1.1.1.1 255.255.255.255
+
+router ospf 1
+router-id 1.1.1.1
+network 1.1.1.1 0.0.0.0 area 0
+network 20.30.40.0 0.0.0.3 area 0
+
+int vasileft3
+vrf forwarding VRF_3_LEFT
+ip address 2.0.0.1 255.255.255.252
+
+int vasiright3
+vrf forwarding VRF_3_RIGHT
+ip address 2.0.0.2 255.255.255.252
+ip nat inside
+
+crypto ikev2 proposal gcm256_prf-sha512_dh-21
+encryption aes-gcm-256
+prf sha512
+group 21
+
+crypto ikev2 policy 1
+proposal gcm256_prf-sha512_dh-21
+
+crypto ipsec transform-set gcm256 esp-gcm 256
+
+crypto ikev2 keyring Cust_3_IKEv2_Keyring
+peer Cust_3_IKEv2_Peer
+address 50.60.70.1 255.255.255.255
+pre-shared-key test123
+
+crypto ikev2 profile Cust_3_IKEv2_Profile
+match identity remote address 50.60.70.1
+authentication local pre-share
+authentication remote pre-share
+keyring local Cust_3_IKEv2_Keyring
+
+crypto ipsec profile Cust_3_IKEv2_gcm256
+set transform-set gcm256
+set ikev2-profile Cust_3_IKEv2_Profile
+
+interface tunnel 3
+description to Cust_3
+tunnel source gi2
+tunnel destination 50.60.70.1
+tunnel mode ipsec ipv4
+tunnel protection ipsec profile Cust_3_IKEv2_gcm256
+vrf forwarding VRF_3_RIGHT
+ip unnumbered gi2
+ip nat outside
+
+ip route 100.71.3.0 255.255.255.0 vasileft3 2.0.0.1 
+
+ip route vrf VRF_3_LEFT 0.0.0.0 0.0.0.0 vasileft3 2.0.0.2 
+ip route vrf VRF_3_LEFT 150.2.0.0 255.255.0.0 gi1 172.16.0.4
+
+ip route vrf VRF_3_RIGHT 150.2.0.0 255.255.0.0 vasiright3 2.0.0.1 
+ip route vrf VRF_3_RIGHT 0.0.0.0 0.0.0.0 tunnel 3
+
+
+ip nat outside source static 10.254.254.2 100.71.3.1 vrf VRF_3_RIGHT
+
+
+[GEHC_NET_TRNSL8]
+
+hostname GEHC_NET_TRNSL8
+
+int gi1
+ip address 172.16.1.2 255.255.255.248
+ip nat inside
+
+
+int gi2
+ip address 172.16.0.4 255.255.255.248
+ip nat outside
+
+
+ip route 150.2.0.0 255.255.0.0 gi1 172.16.1.1
+
+ip route 100.71.3.0 255.255.255.0 gi2 172.16.0.2
+
+#translations for GE network 'native'
+ip nat inside source static 150.2.12.167 150.2.3.167
+
+OR
+
+#translations for GE network via policy based / route maplo
+ip access-list extended CONSOLIDATED_SLASH_24
+permit ip 150.2.0.0 0.0.255.255 100.71.3.0 0.0.0.255
+
+route-map CONSOLIDATED_SLASH_24 permit 10
+match ip address CONSOLIDATED_SLASH_24
+
+ip nat inside source static 150.2.12.167 150.2.3.167 route-map CONSOLIDATED_SLASH_24
+
+---------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
