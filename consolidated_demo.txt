@@ -18,7 +18,7 @@ inside 150.2.0.0/16
 
 -----------------	
 
-[ASA]
+[ASA C-INDEX-3]
 enable
 cisco135
 
@@ -224,6 +224,123 @@ ip route vrf VRF_3_RIGHT 0.0.0.0 0.0.0.0 tunnel 3
 
 ip nat outside source static 10.254.254.2 100.71.3.1 vrf VRF_3_RIGHT
 
+crypto ikev2 keyring Cust_20_IKEv2_Keyring
+peer Cust_20_IKEv2_Peer
+address 40.50.60.1 255.255.255.255
+pre-shared-key test123
+
+crypto ikev2 profile Cust_20_IKEv2_Profile
+match identity remote address 40.50.60.1
+authentication local pre-share
+authentication remote pre-share
+keyring local Cust_20_IKEv2_Keyring
+
+crypto ipsec profile Cust_20_IKEv2_gcm256
+set transform-set gcm256
+set ikev2-profile Cust_20_IKEv2_Profile
+
+vrf definition VRF_20_LEFT
+address-family ipv4
+exit-address-family
+ 
+vrf definition VRF_20_RIGHT
+address-family ipv4
+exit-address-family
+
+int vasileft20
+vrf forwarding VRF_20_LEFT
+ip address 2.0.0.5 255.255.255.252
+
+int vasiright20
+vrf forwarding VRF_20_RIGHT
+ip address 2.0.0.6 255.255.255.252
+ip nat inside
+
+interface tunnel 20
+tunnel mode ipsec ipv4
+tunnel source gi2
+tunnel destination 40.50.60.1
+vrf forwarding VRF_20_RIGHT
+tunnel protection ipsec profile Cust_20_IKEv2_gcm256
+ip unnumbered gi2
+ip nat outside
+
+ip route 100.71.2.0 255.255.255.0 vasileft20 2.0.0.5
+
+ip route vrf VRF_20_LEFT 0.0.0.0 0.0.0.0 vasileft20 2.0.0.6
+ip route vrf VRF_20_LEFT 150.2.0.0 255.255.0.0 gi1 172.16.0.1
+
+ip route vrf VRF_20_RIGHT 150.2.0.0 255.255.0.0 vasiright20 2.0.0.5
+ip route vrf VRF_20_RIGHT 0.0.0.0 0.0.0.0 tunnel 20
+
+ip nat outside source static 10.254.254.2 100.71.2.1 vrf VRF_20_RIGHT
+
+
+--
+vrf definition VRF_10_LEFT
+address-family ipv4
+exit-address-family
+
+vrf definition VRF_10_RIGHT
+address-family ipv4
+exit-address-family
+
+int vasileft10
+vrf forwarding VRF_10_LEFT
+ip address 2.0.0.1 255.255.255.252
+
+int vasiright10
+vrf forwarding VRF_10_RIGHT
+ip address 2.0.0.2 255.255.255.252
+ip nat inside
+
+crypto ikev2 proposal gcm256_prf-sha512_dh-21
+encryption aes-gcm-256
+prf sha512
+group 21
+
+crypto ikev2 policy 1
+proposal gcm256_prf-sha512_dh-21
+
+crypto ipsec transform-set gcm256 esp-gcm 256
+
+crypto ikev2 keyring Cust_10_IKEv2_Keyring
+peer Cust_10_IKEv2_Peer
+address 30.40.50.1 255.255.255.255
+pre-shared-key test123
+
+crypto ikev2 profile Cust_10_IKEv2_Profile
+match identity remote address 30.40.50.1
+authentication local pre-share
+authentication remote pre-share
+keyring local Cust_10_IKEv2_Keyring
+
+crypto ipsec profile Cust_10_IKEv2_gcm256
+set transform-set gcm256
+set ikev2-profile Cust_10_IKEv2_Profile
+
+interface tunnel 10
+description to Cust_10
+tunnel source gi2
+tunnel destination 30.40.50.1
+tunnel mode ipsec ipv4
+tunnel protection ipsec profile Cust_10_IKEv2_gcm256
+vrf forwarding VRF_10_RIGHT
+ip unnumbered gi2
+ip nat outside
+
+ip route 100.71.1.0 255.255.255.0 vasileft10 2.0.0.1 
+
+ip route vrf VRF_10_LEFT 0.0.0.0 0.0.0.0 vasileft10 2.0.0.2 
+ip route vrf VRF_10_LEFT 200.1.1.0 255.255.255.0 gi1 172.16.0.4
+
+ip route vrf VRF_10_RIGHT 200.1.1.0 255.255.255.0 vasiright10 2.0.0.1 
+ip route vrf VRF_10_RIGHT 0.0.0.0 0.0.0.0 tunnel 10
+
+ip nat outside source static 10.254.254.2 100.71.1.1 vrf VRF_10_RIGHT
+
+--
+
 
 [GEHC_NET_TRNSL8]
 
@@ -243,6 +360,8 @@ ip route 150.2.0.0 255.255.0.0 gi1 172.16.1.1
 
 ip route 100.71.3.0 255.255.255.0 gi2 172.16.0.2
 
+ip route 100.71.1.0 255.255.255.0 gi2 172.16.0.2
+
 #translations for GE network 'native'
 ip nat inside source static 150.2.12.167 150.2.3.167
 
@@ -257,12 +376,128 @@ match ip address CONSOLIDATED_SLASH_24
 
 ip nat inside source static 150.2.12.167 150.2.3.167 route-map CONSOLIDATED_SLASH_24
 
+
+ip access-list extended TWO_HUNDRED_DOT_X
+permit ip 150.2.0.0 0.0.255.255 100.71.1.0 0.0.0.255
+
+route-map TWO_HUNDRED_DOT_X permit 10
+match ip address TWO_HUNDRED_DOT_X
+
+ip nat inside source static 150.2.12.167 200.1.1.167
+
+
+
 ---------
 
+[C_INDEX_2]
+
+hostname C_INDEX_2
+
+int g0/0
+ip address 40.50.60.1 255.255.255.252
+no shut
+
+int g0/1
+ip address 10.254.254.1 255.255.255.248
+no shut
+
+int loopback 1
+ip address 1.1.1.4 255.255.255.255
+
+router ospf 1
+router-id 1.1.1.4
+network 1.1.1.4 0.0.0.0 area 0
+network 40.50.60.0 0.0.0.3 area 0
+
+crypto ikev2 proposal gcm256_prf-sha512_dh-21
+encryption aes-gcm-256
+prf sha512
+group 21
+
+crypto ikev2 policy 1
+proposal gcm256_prf-sha512_dh-21
+
+crypto ipsec transform-set gcm256 esp-gcm 256
+
+crypto ikev2 keyring HQ_IKEv2_Keyring
+peer HQ_IKEv2_Peer
+address 20.30.40.1 255.255.255.255
+pre-shared-key test123
+
+crypto ikev2 profile HQ_IKEv2_Profile
+match identity remote address 20.30.40.1
+authentication local pre-share
+authentication remote pre-share
+keyring local HQ_IKEv2_Keyring
+
+crypto ipsec profile HQ_IKEv2_gcm256
+set transform-set gcm256
+set ikev2-profile HQ_IKEv2_Profile
+
+interface tunnel 20
+ip unnumbered gi0/0
+tunnel mode ipsec ipv4
+tunnel source gi0/0
+tunnel destination 20.30.40.1
+tunnel protection ipsec profile HQ_IKEv2_gcm256
+
+ip route 150.2.0.0 255.255.0.0 tunnel 20
 
 
+-------------------------
 
+[C_INDEX_1]
+hostname C_INDEX_1
 
+int g0/0
+ip address 30.40.50.1 255.255.255.252
+no shut
+
+int g0/1
+ip address 10.254.254.1 255.255.255.248
+no shut
+
+int loopback 1
+ip address 1.1.1.3 255.255.255.255
+
+router ospf 1
+router-id 1.1.1.3
+network 1.1.1.3 0.0.0.0 area 0
+network 30.40.50.0 0.0.0.3 area 0
+
+crypto ikev2 proposal gcm256_prf-sha512_dh-21
+encryption aes-gcm-256
+prf sha512
+group 21
+
+crypto ikev2 policy 1
+proposal gcm256_prf-sha512_dh-21
+
+crypto ipsec transform-set gcm256 esp-gcm 256
+
+crypto ikev2 keyring HQ_IKEv2_Keyring
+peer HQ_IKEv2_Peer
+address 20.30.40.1 255.255.255.255
+pre-shared-key test123
+
+crypto ikev2 profile HQ_IKEv2_Profile
+match identity remote address 20.30.40.1
+authentication local pre-share
+authentication remote pre-share
+keyring local HQ_IKEv2_Keyring
+
+crypto ipsec profile HQ_IKEv2_gcm256
+set transform-set gcm256
+set ikev2-profile HQ_IKEv2_Profile
+
+interface tunnel 10
+ip unnumbered gi0/0
+tunnel source gi0/0
+tunnel destination 20.30.40.1
+tunnel mode ipsec ipv4
+tunnel protection ipsec profile HQ_IKEv2_gcm256
+
+ip route 200.1.1.0 255.255.255.0 tunnel 10
 
 
 
