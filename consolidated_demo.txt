@@ -1,5 +1,4 @@
 
-
 [core]
 inside 150.2.0.0/16
 
@@ -138,7 +137,7 @@ ip route 100.71.0.0 255.255.128.0 gi0/0 172.16.0.2
 
 #route to GEHC_NET_TRNSL8
 ip route 100.71.3.0 255.255.255.0 gi0/2 172.16.1.2
-
+ip route 100.71.1.0 255.255.255.0 gi0/2 172.16.1.2
 ---------------------
 
 [VPN6]
@@ -276,7 +275,7 @@ ip route vrf VRF_20_RIGHT 0.0.0.0 0.0.0.0 tunnel 20
 ip nat outside source static 10.254.254.2 100.71.2.1 vrf VRF_20_RIGHT
 
 
---
+
 vrf definition VRF_10_LEFT
 address-family ipv4
 exit-address-family
@@ -339,7 +338,7 @@ ip route vrf VRF_10_RIGHT 0.0.0.0 0.0.0.0 tunnel 10
 
 ip nat outside source static 10.254.254.2 100.71.1.1 vrf VRF_10_RIGHT
 
---
+
 
 
 [GEHC_NET_TRNSL8]
@@ -362,12 +361,8 @@ ip route 100.71.3.0 255.255.255.0 gi2 172.16.0.2
 
 ip route 100.71.1.0 255.255.255.0 gi2 172.16.0.2
 
-#translations for GE network 'native'
-ip nat inside source static 150.2.12.167 150.2.3.167
 
-OR
-
-#translations for GE network via policy based / route maplo
+#translations for GE network via policy based / route map
 ip access-list extended CONSOLIDATED_SLASH_24
 permit ip 150.2.0.0 0.0.255.255 100.71.3.0 0.0.0.255
 
@@ -375,6 +370,8 @@ route-map CONSOLIDATED_SLASH_24 permit 10
 match ip address CONSOLIDATED_SLASH_24
 
 ip nat inside source static 150.2.12.167 150.2.3.167 route-map CONSOLIDATED_SLASH_24
+ip nat inside source static 150.2.1.250 150.2.3.20 route-map CONSOLIDATED_SLASH_24
+
 
 
 ip access-list extended TWO_HUNDRED_DOT_X
@@ -383,7 +380,9 @@ permit ip 150.2.0.0 0.0.255.255 100.71.1.0 0.0.0.255
 route-map TWO_HUNDRED_DOT_X permit 10
 match ip address TWO_HUNDRED_DOT_X
 
-ip nat inside source static 150.2.12.167 200.1.1.167
+ip nat inside source static 150.2.12.167 200.1.1.167 route-map TWO_HUNDRED_DOT_X
+ip nat inside source static 150.2.3.248 200.1.1.248 route-map TWO_HUNDRED_DOT_X
+ip nat inside source static 150.2.1.250 200.1.1.250 route-map TWO_HUNDRED_DOT_X
 
 
 
